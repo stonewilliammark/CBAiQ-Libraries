@@ -54,6 +54,7 @@ const VERTICAL_LABELS = {
   'government':         'Government',
   'financial-services': 'Financial Services',
   'retail':             'Retail',
+  'visitor-economy':    'Visitor Economy',
 };
 
 // ─── SVG constants ───────────────────────────────────────────────────────────
