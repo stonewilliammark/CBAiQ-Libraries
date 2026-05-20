@@ -167,7 +167,7 @@ function readContent(type) {
       if (stat.isDirectory()) {
         const item = readFolderItem(type, groupName, entry, entryPath);
         if (item) items.push(item);
-      } else if (entry.endsWith('.md')) {
+      } else if (entry.endsWith('.md') && entry !== 'README.md') {
         const slug = entry.replace(/\.md$/, '');
         const { data, content } = matter(fs.readFileSync(entryPath, 'utf8'));
         data._sourcePath = `content/${type}/${groupName}/${entry}`;
