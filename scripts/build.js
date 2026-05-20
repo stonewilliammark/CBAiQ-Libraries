@@ -122,25 +122,37 @@ function compareVer(a, b) {
 
 function readFolderItem(type, group, slug, folderPath) {
   const readmePath = path.join(folderPath, 'README.md');
-  if (!fs.existsSync(readmePath)) return null;
-
-  const { data, content } = matter(fs.readFileSync(readmePath, 'utf8'));
 
   const versionFiles = fs.readdirSync(folderPath)
     .filter(f => f !== 'README.md' && f.endsWith('.md') && parseVersionStr(f))
     .map(f => {
       const ver = parseVersionStr(f);
       const { data: vd, content: vbody } = matter(fs.readFileSync(path.join(folderPath, f), 'utf8'));
-      return { version: `v${ver}`, date: vd.date || '', author: vd.author || '', summary: vd.summary || '', body: vbody.trim(), _ver: ver };
+      return { version: `v${ver}`, date: vd.date || '', author: vd.author || '', summary: vd.summary || '', body: vbody.trim(), _ver: ver, _meta: vd };
     })
     .sort((a, b) => compareVer(a._ver, b._ver));
+
+  if (!versionFiles.length && !fs.existsSync(readmePath)) return null;
+
+  let data, content;
+
+  if (fs.existsSync(readmePath)) {
+    // README.md present — use it for page metadata (legacy / mixed format)
+    ({ data, content } = matter(fs.readFileSync(readmePath, 'utf8')));
+  } else {
+    // No README — pull all page metadata from the latest version file
+    data = Object.assign({}, versionFiles[0]._meta);
+    content = '';
+  }
 
   const latest = versionFiles[0];
   if (latest) {
     if (!data.version) data.version = latest.version;
     if (!data.updated) data.updated = latest.date;
   }
-  data.versions = versionFiles;
+
+  // Strip internal fields before exposing versions array
+  data.versions = versionFiles.map(({ _ver, _meta, ...rest }) => rest);
   data._folderFormat = true;
   data._sourcePath = `content/${type}/${group}/${slug}/`;
 
@@ -434,7 +446,8 @@ function buildPromptPage(item, all) {
     `  <button class="cb-btn cb-btn-dark" data-copy="${promptId}">${COPY_SVG} Copy latest prompt</button>`,
     `  <button class="cb-btn cb-btn-light">${DOWNLOAD_SVG} Download as .md</button>`,
     `</div>`,
-    renderBody(content),
+    data.use_case ? `<h2 class="cb-section-h2">Use case</h2>${renderBody(data.use_case)}` : renderBody(content),
+    data.tips ? `<h2 class="cb-section-h2">Tips</h2>${renderBody(data.tips)}` : '',
     attachHtml,
     latest.body ? `<h2 class="cb-section-h2">Latest prompt</h2>
 <div class="cb-prompt-block">

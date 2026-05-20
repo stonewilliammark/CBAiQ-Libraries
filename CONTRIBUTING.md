@@ -344,7 +344,11 @@ content/<type>/<group>/<slug>/
 
 The build script parses the version number from the filename automatically. No version field is needed in the README front-matter — it is derived from the latest version file.
 
-### README.md schema (prompts)
+### Version file schema (prompts) — latest version carries all metadata
+
+Prompts do **not** use a README.md. All metadata lives in the **latest version file's front-matter**. Older version files keep only the three changelog fields (`date`, `author`, `summary`) — the build script reads metadata from the newest file only.
+
+**Latest version file** (e.g. `prompt_v1.2.md`):
 
 ```yaml
 ---
@@ -352,23 +356,42 @@ title: "Prompt Title"
 intent: "intent-folder-name"
 owner: "Full Name"
 description: "One sentence — appears on the catalogue card."
-copy_count: 0                          # optional
+date: "YYYY-MM-DD"
+author: "Full Name"
+summary: "What changed in this version — appears in the changelog table."
+use_case: |
+  When to reach for this prompt. What stage of work it suits.
+  May span multiple sentences or a short paragraph.
+tips: |
+  - Hint one.
+  - Hint two.
 attachments:
   - title: "Context File Name"
     type: context                      # context | workflow | prompt
     url: "/context/intent/slug/"
-related:
-  - title: "Related item"
-    type: workflow
-    url: "/workflows/intent/slug/"
+copy_count: 0                          # optional
 ---
 
-## Use case
-When to reach for this prompt. What stage of work it suits.
-
-## Tips
-Optional hints, common mistakes, how to combine with other prompts.
+[Prompt body — the actual prompt text only. No metadata, no wrapper.]
 ```
+
+**Older version files** (e.g. `prompt_v1.1.md`, `prompt_v0.0.3.md`):
+
+```yaml
+---
+date: "YYYY-MM-DD"
+author: "Full Name"
+summary: "What changed in this version."
+---
+
+[Prompt body at that point in time]
+```
+
+When you publish a new version:
+1. Create a new file (e.g. `prompt_v1.3.md`) with the full front-matter schema above
+2. Copy any metadata from the previous latest version that has not changed
+3. Update `date`, `author`, `summary`, and the body
+4. The old version file is never touched — it stays as a historical snapshot
 
 ### README.md schema (context files)
 
@@ -431,7 +454,7 @@ filesize: "32 KB"
 
 The solution body (the full solution description) goes in `solution_v1.00.md`, not in README.md.
 
-### Version file schema (all types)
+### Version file schema (context files, workflows, solutions)
 
 ```yaml
 ---
@@ -440,9 +463,11 @@ author: "Full Name"
 summary: "One line describing what changed in this version."
 ---
 
-[Full content here — prompt text, workflow steps, context document, or solution description]
-No wrapper, no metadata. Just the content as it would appear to a user.
+[Full content here — workflow steps, context document, or solution description]
+No wrapper, no extra metadata. Just the content as it would appear to a user.
 ```
+
+Note: prompts use a different schema — see *Version file schema (prompts)* above.
 
 ---
 
