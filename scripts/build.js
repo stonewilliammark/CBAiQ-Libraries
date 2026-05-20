@@ -4,18 +4,24 @@
 /**
  * CBAiQ Libraries — site build script
  *
- * Reads:   content/<type>/<group>/<slug>.md  (YAML front-matter + markdown body)
- * Writes:  site/<type>/<group>/<slug>/index.html  (full HTML page)
- *          site/<type>/index.html                  (catalogue index per library)
- *          site/search-index.json                  (client-side search data)
+ * TWO content formats are supported:
  *
- * Also copies:
- *   assets/  →  site/assets/
- *   index.html  →  site/index.html
- *   content/<type>/<group>/_versions/  →  site/<type>/<group>/_versions/
+ * LEGACY (single file):
+ *   content/<type>/<group>/<slug>.md  — YAML front-matter + markdown body
  *
- * Run:  node scripts/build.js
- * Deps: gray-matter, marked  (install with: npm install)
+ * FOLDER FORMAT (preferred for new content):
+ *   content/<type>/<group>/<slug>/
+ *     README.md       — front-matter metadata + prose body (use case, tips)
+ *     prompt_v1.1.md  — version file: minimal front-matter + content body
+ *     prompt_v1.0.md  — older version
+ *
+ * Version files use naming convention: <prefix>_v<major>.<minor>.md
+ * Version number is parsed from filename; front-matter provides date/author/summary.
+ *
+ * Outputs:
+ *   site/<type>/<group>/<slug>/index.html
+ *   site/<type>/index.html
+ *   site/search-index.json
  */
 
 const fs   = require('fs');
@@ -97,30 +103,78 @@ function copyDir(src, dest) {
   }
 }
 
-// ─── Read content — skip _versions/ subdirectories ───────────────────────────
+// ─── Folder-format helpers ────────────────────────────────────────────────────
+
+function parseVersionStr(filename) {
+  const m = filename.match(/_v(\d+(?:\.\d+)*)\.md$/i);
+  return m ? m[1] : null;
+}
+
+function compareVer(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pb[i] || 0) - (pa[i] || 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+function readFolderItem(type, group, slug, folderPath) {
+  const readmePath = path.join(folderPath, 'README.md');
+  if (!fs.existsSync(readmePath)) return null;
+
+  const { data, content } = matter(fs.readFileSync(readmePath, 'utf8'));
+
+  const versionFiles = fs.readdirSync(folderPath)
+    .filter(f => f !== 'README.md' && f.endsWith('.md') && parseVersionStr(f))
+    .map(f => {
+      const ver = parseVersionStr(f);
+      const { data: vd, content: vbody } = matter(fs.readFileSync(path.join(folderPath, f), 'utf8'));
+      return { version: `v${ver}`, date: vd.date || '', author: vd.author || '', summary: vd.summary || '', body: vbody.trim(), _ver: ver };
+    })
+    .sort((a, b) => compareVer(a._ver, b._ver));
+
+  const latest = versionFiles[0];
+  if (latest) {
+    if (!data.version) data.version = latest.version;
+    if (!data.updated) data.updated = latest.date;
+  }
+  data.versions = versionFiles;
+  data._folderFormat = true;
+  data._sourcePath = `content/${type}/${group}/${slug}/`;
+
+  return { type, slug, group, data, content };
+}
+
+// ─── Read content — supports legacy single-file and new folder format ─────────
 
 function readContent(type) {
   const dir = path.join(CONTENT, type);
   if (!fs.existsSync(dir)) return [];
   const items = [];
 
-  function walk(d, parts) {
-    for (const f of fs.readdirSync(d).sort()) {
-      if (f === '_versions') continue; // skip archived version files
-      const full = path.join(d, f);
-      const stat = fs.statSync(full);
+  for (const groupName of fs.readdirSync(dir).sort()) {
+    if (groupName.startsWith('_')) continue;
+    const groupDir = path.join(dir, groupName);
+    if (!fs.statSync(groupDir).isDirectory()) continue;
+
+    for (const entry of fs.readdirSync(groupDir).sort()) {
+      if (entry.startsWith('_')) continue;
+      const entryPath = path.join(groupDir, entry);
+      const stat = fs.statSync(entryPath);
+
       if (stat.isDirectory()) {
-        walk(full, [...parts, f]);
-      } else if (f.endsWith('.md')) {
-        const slug  = f.replace(/\.md$/, '');
-        const group = parts[parts.length - 1] || '';
-        const raw   = fs.readFileSync(full, 'utf8');
-        const { data, content } = matter(raw);
-        items.push({ type, slug, group, data, content });
+        const item = readFolderItem(type, groupName, entry, entryPath);
+        if (item) items.push(item);
+      } else if (entry.endsWith('.md')) {
+        const slug = entry.replace(/\.md$/, '');
+        const { data, content } = matter(fs.readFileSync(entryPath, 'utf8'));
+        data._sourcePath = `content/${type}/${groupName}/${entry}`;
+        items.push({ type, slug, group: groupName, data, content });
       }
     }
   }
-  walk(dir, []);
   return items;
 }
 
@@ -338,8 +392,9 @@ function buildSolutionPage(item, all) {
     `<div style="margin-top:10px;"><span class="cb-tag${data.status==='Established'?' cb-tag-green':' cb-tag-blue'}">${esc(data.status||'Established')}</span></div>`,
     downloadCard(data.filename, `Source markdown · ${data.filesize||''} · paste into any AI chat for Q&A or drafting`),
     renderBody(content),
+    data._folderFormat && data.versions && data.versions[0] && data.versions[0].body ? renderBody(data.versions[0].body) : '',
     data.versions && data.versions.length ? `<h2 class="cb-section-h2">Version history</h2><p style="color:var(--shade-70);font-size:13px;max-width:62ch;margin:0 0 14px;">Every change is captured here.</p>${versionAccordion(data.versions,'solution')}` : '',
-    autoNotice(`content/solutions/${vertical}/${slug}.md`),
+    autoNotice(data._sourcePath || `content/solutions/${vertical}/${slug}.md`),
     `</main></div>`,
     htmlFoot(rel),
   ].join('\n');
@@ -417,8 +472,9 @@ function buildContextPage(item, all) {
     `<div class="cb-meta-row" style="margin-top:18px;"><span>Owner · ${esc(data.owner||'—')}</span><span class="dot">·</span><span>Latest ${esc(data.version||'')} · ${esc(formatDate(data.updated))}</span></div>`,
     downloadCard(data.filename, `Source markdown · ${data.filesize||''} · upload to Claude Projects, ChatGPT Projects, or paste into any AI chat`),
     renderBody(content),
+    data._folderFormat && data.versions && data.versions[0] && data.versions[0].body ? renderBody(data.versions[0].body) : '',
     data.versions && data.versions.length ? `<h2 class="cb-section-h2">Version history</h2><p style="color:var(--shade-70);font-size:13px;max-width:62ch;margin:0 0 14px;">Each archived version is downloadable as a separate file.</p>${versionAccordion(data.versions,'context')}` : '',
-    autoNotice(`content/context/${intent}/${slug}.md`),
+    autoNotice(data._sourcePath || `content/context/${intent}/${slug}.md`),
     `</main></div>`,
     htmlFoot(rel),
   ].join('\n');
@@ -449,8 +505,9 @@ function buildWorkflowPage(item, all) {
     `<div class="cb-meta-row" style="margin-top:18px;"><span>Owner · ${esc(data.owner||'—')}</span><span class="dot">·</span><span>Latest ${esc(data.version||'')} · ${esc(formatDate(data.updated))}</span></div>`,
     downloadCard(data.filename, `Reference guide · ${data.filesize||''}`),
     renderBody(content),
+    data._folderFormat && data.versions && data.versions[0] && data.versions[0].body ? renderBody(data.versions[0].body) : '',
     data.versions && data.versions.length ? `<h2 class="cb-section-h2">Version history</h2>${versionAccordion(data.versions,'workflow')}` : '',
-    autoNotice(`content/workflows/${intent}/${slug}.md`),
+    autoNotice(data._sourcePath || `content/workflows/${intent}/${slug}.md`),
     `</main></div>`,
     htmlFoot(rel),
   ].join('\n');

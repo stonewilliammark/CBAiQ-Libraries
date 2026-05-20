@@ -294,6 +294,158 @@ When migrating content for a stub:
 
 ---
 
+## Versioning rules
+
+### Version number format
+
+Use two-part versioning: `v[major].[minor]`
+
+| Version | Meaning |
+|---|---|
+| `v0.1`, `v0.2` | Draft — not yet ready to share widely |
+| `v1.0` | First published version |
+| `v1.1`, `v1.2` | Minor update — added section, refined wording, small improvement |
+| `v2.0`, `v3.0` | Major rewrite — fundamentally different approach or breaking change |
+
+**Do not bump the version for:** typo fixes in description, owner name corrections, fixing a broken link. These are metadata changes only.
+
+**Rule of thumb:** would a user notice a difference if they used the old version vs. the new one? Yes → bump. No → don't.
+
+### Where versioning rules live
+
+| Audience | Where to find the rules |
+|---|---|
+| Humans editing the repo | This file (`CONTRIBUTING.md`) |
+| AI agents working in the repo | This file (`CONTRIBUTING.md`) — agents are told to read it first |
+| AI creating new content | The Prompt Builder prompt — rules are baked in so users don't need to read docs |
+
+---
+
+## Folder-based content format (preferred for new content)
+
+New content should use the folder format. Legacy single-file content continues to work and should be migrated to folder format when it is next updated.
+
+### Folder structure
+
+```
+content/<type>/<group>/<slug>/
+├── README.md          ← metadata front-matter + prose body
+└── <prefix>_v1.0.md   ← version file: minimal front-matter + content body
+```
+
+### Version file naming convention
+
+| Content type | Version file naming | Example |
+|---|---|---|
+| Prompt | `prompt_v{version}.md` | `prompt_v1.2.md` |
+| Context file | `{slug}_v{version}.md` | `tone-of-voice_v1.2.md` |
+| Workflow | `workflow_v{version}.md` | `workflow_v1.0.md` |
+| Solution | `solution_v{version}.md` | `solution_v1.00.md` |
+
+The build script parses the version number from the filename automatically. No version field is needed in the README front-matter — it is derived from the latest version file.
+
+### README.md schema (prompts)
+
+```yaml
+---
+title: "Prompt Title"
+intent: "intent-folder-name"
+owner: "Full Name"
+description: "One sentence — appears on the catalogue card."
+copy_count: 0                          # optional
+attachments:
+  - title: "Context File Name"
+    type: context                      # context | workflow | prompt
+    url: "/context/intent/slug/"
+related:
+  - title: "Related item"
+    type: workflow
+    url: "/workflows/intent/slug/"
+---
+
+## Use case
+When to reach for this prompt. What stage of work it suits.
+
+## Tips
+Optional hints, common mistakes, how to combine with other prompts.
+```
+
+### README.md schema (context files)
+
+```yaml
+---
+title: "Context File Title"
+intent: "intent-folder-name"
+owner: "Full Name"
+description: "One sentence — appears on the catalogue card."
+filename: "CBAiQ_Title_Context_v1.0_20260101.md"   # display name for download
+filesize: "12 KB"
+---
+
+## Description
+What this file covers and why it exists.
+
+## Use case
+When to attach it. Which AI tools, which project types.
+
+## How to use it
+1. Download the file.
+2. Upload to your AI tool's project knowledge.
+3. Reference it in your prompt.
+```
+
+### README.md schema (workflows)
+
+```yaml
+---
+title: "Workflow Title"
+intent: "intent-folder-name"
+owner: "Full Name"
+description: "One sentence — appears on the catalogue card."
+---
+
+## Overview
+What this workflow covers and who it is for.
+
+## Tips
+Optional hints and common mistakes.
+```
+
+### README.md schema (solutions)
+
+```yaml
+---
+title: "Solution Title"
+vertical: "vertical-folder-name"
+status: "Established"                  # Established | Emerging | Pilot
+commercial_owner: "Full Name"
+technical_owner: "Full Name"
+description: "One sentence — appears on the catalogue card."
+loe_url: "https://..."                 # optional
+sop_url: "https://..."                 # optional
+github_url: "https://..."              # optional
+filename: "Title_Solution_v1.00.md"   # display name for download
+filesize: "32 KB"
+---
+```
+
+The solution body (the full solution description) goes in `solution_v1.00.md`, not in README.md.
+
+### Version file schema (all types)
+
+```yaml
+---
+date: "YYYY-MM-DD"
+author: "Full Name"
+summary: "One line describing what changed in this version."
+---
+
+[Full content here — prompt text, workflow steps, context document, or solution description]
+No wrapper, no metadata. Just the content as it would appear to a user.
+```
+
+---
+
 ## Prohibited actions
 
 - Do not edit any file in `site/` (it is gitignored — generated on every build)
